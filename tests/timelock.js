@@ -2,8 +2,6 @@ const assert = require('assert')
 const anchor = require('@project-serum/anchor');
 const common = require('@project-serum/common');
 const {TOKEN_PROGRAM_ID} = require('@solana/spl-token')
-const {PublicKey} = require("@solana/web3.js");
-const {utils} = require("@project-serum/anchor");
 const {SystemProgram, Keypair} = anchor.web3;
 const {BN} = anchor;
 
@@ -24,25 +22,24 @@ describe('timelock', () => {
 
     let pdaSigner; //needed to sign transactions in the name of PDA account during withdrawal/cancel.
 
-    //params
     const start = new BN(+new Date() / 1000 + 5); //divide by 1000 since unix timestamp is in seconds and add 5 seconds
-    const end = new BN((+new Date()) / 1000 + (60)); //one min later
-    const deposited_amount = new BN(13370);
+    const end = new BN((+new Date()) / 1000 + 60); //one min later
+    const deposited_amount = new BN(1337);
     let withdrawAmount;
 
     it("Initialize test state", async () => {
         const [_mint, _mint_authority] = await common.createMintAndVault(
             provider,
-            new anchor.BN(10000000)
+            new anchor.BN(10_000)
         );
         mint = _mint;
         depositorTokenAcc = _mint_authority;
 
-        //must check if the associated token account already exists
+        // must check if the associated token account already exists
         // pdaTokenAcc = await common.createTokenAccount(provider, mint, pda.publicKey)
-        //todo ne kreira se ovde
+        // todo ne kreira se ovde
         // beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey)
-        //should we use anchor.utils.token.associatedAddress()?
+        // should we use anchor.utils.token.associatedAddress()?
     })
 
     it("Vesting Contract Creation", async () => {
@@ -66,8 +63,8 @@ describe('timelock', () => {
             {
                 accounts: {
                     pda: pda.publicKey,
-                    pdaTokenAcc: pdaTokenAcc.publicKey,
                     pdaSigner,
+                    pdaTokenAcc: pdaTokenAcc.publicKey,
                     depositorTokenAcc,
                     depositor: depositor.publicKey,
                     systemProgram: SystemProgram.programId,
@@ -98,14 +95,14 @@ describe('timelock', () => {
         setTimeout(async () => {
             // beneficiaryTokenAcc = await utils.token.associatedAddress({mint, owner: beneficiary.publicKey})
             //console.log('beneficiary ata', beneficiaryTokenAcc.toBase58())
-            beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey)
+            beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey);
             console.log('beneficiary ata 2', beneficiaryTokenAcc.toBase58())
 
             const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
             const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
             const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
             const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
-            const withdrawAmount = new BN(10)
+            const withdrawAmount = new BN(10);
 
             console.log('pda sig', pdaSigner.toBase58(), 'pda', pda.publicKey.toBase58(), 'pda_ata_client', pdaTokenAcc.publicKey.toBase58(), 'pda_tok_acc', (await program.account.vestingContract.fetch(pda.publicKey)).pdaTokenAcc.toBase58())
             console.log('seed', pda.publicKey.toBuffer())
@@ -153,8 +150,7 @@ describe('timelock', () => {
                     depositorTokenAcc,
                     tokenProgram: TOKEN_PROGRAM_ID,
                     systemProgram: SystemProgram.programId,
-                },
-                signers: [depositor.payer]
+                }
             })
 
             const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);

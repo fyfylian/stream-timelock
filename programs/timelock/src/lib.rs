@@ -10,7 +10,6 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 pub mod timelock {
     use super::*;
 
-    // #[access_control(Create::accounts(&ctx, nonce))]
     pub fn create(
         ctx: Context<Create>,
         beneficiary: Pubkey,
@@ -42,7 +41,7 @@ pub mod timelock {
         pda.end = end;
         pda.nonce = nonce;
         pda.withdrawn = 0;
-        msg!("setting up the seeds");
+
         let seeds = [
             pda.to_account_info().key.as_ref(),
             &[pda.nonce],
@@ -63,15 +62,14 @@ pub mod timelock {
         let a = ctx.accounts;
         let pda = &mut a.pda;
 
-        //todo might be unnecessary due to macro attribute check in the context?
+        //todo check if this is already checked
         if a.beneficiary.key() != pda.beneficiary
             || a.pda_token_acc.key() != pda.pda_token_acc { Err(ProgramError::InvalidAccountData)? };
 
         let available = available(&pda, now);
         if amount > available { Err(ProgramError::InvalidArgument)? };
-        //todo check if this persists if token transfer fails?
-        pda.withdrawn = pda.withdrawn.checked_add(amount).unwrap();
 
+        pda.withdrawn = pda.withdrawn.checked_add(amount).unwrap();
 
         let seeds = [
             pda.to_account_info().key.as_ref(),
@@ -102,16 +100,15 @@ pub mod timelock {
             &[pda.nonce],
         ];
         let signer = &[&seeds[..]];
-        //send what's available to beneficiary
-        msg!("rdy to transfer?");
+
         transfer_tokens(&a.pda_token_acc.to_account_info(),
                         &a.beneficiary_token_acc.to_account_info(),
                         &a.pda_signer.to_account_info(),
                         &a.token_program,
                         signer,
-                        available - 15, //todo wtf fix this
+                        available - 11, //todo wtf fix this
         );
-        msg!("One transfer passed");
+
         //send the rest back to the depositor
         transfer_tokens(&a.pda_token_acc.to_account_info(),
                         &a.depositor_token_acc.to_account_info(),
@@ -226,7 +223,7 @@ pub fn available(contract: &VestingContract, now: u64) -> u64 {
                   contract.deposited_amount)
 }
 
-pub fn transfer_tokens<'a, 'b, 'c>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &AccountInfo<'a>, token_program: &Program<'a, Token>, signer_seeds: &[&[&[u8]]], amount: u64) -> ProgramResult {
+pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &AccountInfo<'a>, token_program: &Program<'a, Token>, signer_seeds: &[&[&[u8]]], amount: u64) -> ProgramResult {
     let ix = spl_token::instruction::transfer(
         &spl_token::ID,
         &from.key(),
