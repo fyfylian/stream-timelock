@@ -1,89 +1,117 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{system_program, program::invoke, sysvar::clock::Clock};
+use anchor_lang::solana_program::{program::invoke, sysvar::clock::Clock};
 use anchor_spl::token::*;
+use anchor_lang::solana_program::program::invoke_signed;
+
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod timelock {
     use super::*;
+    use anchor_spl::token;
 
-    // #[access_control(CreateVesting::accounts(&ctx, nonce))]
     pub fn create(
         ctx: Context<Create>,
         beneficiary: Pubkey,
         deposited_amount: u64,
-        // nonce: u8,
         start: u64,
         end: u64,
-        // period_count: u64,
-        //   realizor: Option<Realizor>,
+        nonce: u8,
     ) -> ProgramResult {
+        let now = Clock::get()?.unix_timestamp as u64;
+        let a = ctx.accounts;
+        let pda = &mut a.pda;
+
         if deposited_amount <= 0 {
             return Err(VestingError::ZeroAmount.into());
         }
 
-        // if !is_valid_schedule(start_ts, end_ts, period_count) { //todo create this method
-        //     return Err(ErrorCode::InvalidSchedule.into());
-        // }
+        if !is_valid_schedule(start, end, now) {
+            return Err(VestingError::InvalidSchedule.into());
+        }
 
-        //accounts check
+        //todo additional accounts check?
 
-        let pda = &mut ctx.accounts.pda;
-        pda.depositor = ctx.accounts.depositor.key();
+        pda.depositor = a.depositor.key();
         pda.beneficiary = beneficiary;
-        pda.mint = ctx.accounts.pda_token_acc.mint;
-        pda.pda_token_acc = ctx.accounts.pda_token_acc.key();
+        pda.mint = a.pda_token_acc.mint;
+        pda.pda_token_acc = a.pda_token_acc.key();
         pda.deposited_amount = deposited_amount;
         pda.start = start;
         pda.end = end;
-        //pda.created_ts = ctx.accounts.clock.unix_timestamp;
+        pda.nonce = nonce;
         pda.withdrawn = 0;
-        pda.unlocked = 0;
 
-        // transfer(ctx.accounts.into(), deposited_amount)?;
 
-        let ix = spl_token::instruction::transfer(
-            &spl_token::ID,
-            &ctx.accounts.depositor_token_acc.key(),
-            &ctx.accounts.pda_token_acc.key(),
-            &ctx.accounts.depositor.key(),
-            &[],
+        transfer_tokens(
+            &a.depositor_token_acc.to_account_info(),
+            &a.pda_token_acc.to_account_info(),
+            &a.depositor.to_account_info(),
+            &a.token_program,
+            &[], //no need for signer here?
             deposited_amount,
-        )?;
-        invoke(
-            &ix,
-            &[
-                ctx.accounts.depositor_token_acc.to_account_info().clone(),
-                ctx.accounts.pda_token_acc.to_account_info().clone(),
-                ctx.accounts.depositor.to_account_info().clone(),
-                ctx.accounts.token_program.to_account_info().clone(),
-            ],
         )
     }
 
-
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> ProgramResult {
-        let pda = &mut ctx.accounts.pda;
+        let now = Clock::get()?.unix_timestamp as u64;
+        let a = ctx.accounts;
+        let pda = &mut a.pda;
 
-        //todo might be unnecessary due to macro attribute check in the context
-        if ctx.accounts.beneficiary.key() != pda.beneficiary
-            || ctx.accounts.pda_token_acc.key() != pda.pda_token_acc { Err(ProgramError::InvalidAccountData)? }
+        //todo might be unnecessary due to macro attribute check in the context?
+        if a.beneficiary.key() != pda.beneficiary
+            || a.pda_token_acc.key() != pda.pda_token_acc { Err(ProgramError::InvalidAccountData)? };
 
-        let available = available(&pda, Clock::get()?.unix_timestamp as u64);
-        if amount > available { Err(ProgramError::AccountBorrowFailed)? }
+        let available = available(&pda, now);
+        if amount > available { Err(ProgramError::AccountBorrowFailed)? };
 
-        //will this persist if the token transfer fail?
+        //todo check if this persists if token transfer fails?
         pda.withdrawn = pda.withdrawn.checked_add(amount).unwrap();
 
-        transfer_tokens(&ctx.accounts.pda_token_acc.to_account_info(),
-                        &ctx.accounts.beneficiary_token_acc.to_account_info(),
-                        &pda.to_account_info(),
-                        &ctx.accounts.token_program,
+
+        let seeds = [
+            pda.to_account_info().key.as_ref(),
+            &[pda.nonce],
+        ];
+        let signer = &[&seeds[..]];
+        transfer_tokens(&a.pda_token_acc.to_account_info(),
+                        &a.beneficiary_token_acc.to_account_info(),
+                        &a.pda.to_account_info(),
+                        &a.token_program,
+                        signer,
                         amount)
     }
 
     pub fn cancel(ctx: Context<Cancel>) -> ProgramResult {
+        let now = Clock::get()?.unix_timestamp as u64;
+        let a = ctx.accounts;
+        let pda = &mut a.pda;
+
+        let available = available(&pda, now);
+
+        let seeds = [
+            pda.to_account_info().key.as_ref(),
+            &[pda.nonce],
+        ];
+        let signer = &[&seeds[..]];
+        //send what's available to beneficiary
+        transfer_tokens(&a.pda_token_acc.to_account_info(),
+                        &a.beneficiary_token_acc.to_account_info(),
+                        &pda.to_account_info(),
+                        &a.token_program,
+                        signer,
+                        available,
+        );
+        //send the rest back to the depositor
+        transfer_tokens(&a.pda_token_acc.to_account_info(),
+                        &a.depositor_token_acc.to_account_info(),
+                        &pda.to_account_info(),
+                        &a.token_program,
+                        signer,
+                        pda.deposited_amount - available,
+        );
+        pda.withdrawn = pda.deposited_amount;
         Ok(())
     }
 }
@@ -104,11 +132,13 @@ pub struct Create<'info> {
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    #[account(mut, signer, has_one = beneficiary, has_one = pda_token_acc)]
+    #[account(mut, has_one = beneficiary, has_one = pda_token_acc)]
     pub pda: Account<'info, VestingContract>,
     #[account(mut)]
     pub pda_token_acc: Account<'info, TokenAccount>,
-    #[account(mut, constraint = beneficiary_token_acc.owner == *beneficiary.key)]
+    #[account(seeds = [pda.to_account_info().key.as_ref()], bump = pda.nonce)]
+    pub pda_signer: UncheckedAccount<'info>,
+    #[account(mut, constraint = beneficiary_token_acc.owner == * beneficiary.key)]
     pub beneficiary_token_acc: Account<'info, TokenAccount>,
     pub beneficiary: Signer<'info>,
     pub token_program: Program<'info, Token>,
@@ -119,10 +149,18 @@ pub struct Withdraw<'info> {
 pub struct Cancel<'info> {
     #[account(mut, has_one = depositor, has_one = beneficiary, has_one = pda_token_acc)]
     pub pda: Account<'info, VestingContract>,
-    // todo macros
-    pub depositor: Signer<'info>,
-    pub beneficiary: UncheckedAccount<'info>,
+    #[account(mut)]
     pub pda_token_acc: Account<'info, TokenAccount>,
+    #[account(seeds = [pda.to_account_info().key.as_ref()], bump = pda.nonce)]
+    pub pda_signer: UncheckedAccount<'info>,
+    pub depositor: Signer<'info>,
+    #[account(mut)]
+    pub depositor_token_acc: Account<'info, TokenAccount>,
+    pub beneficiary: UncheckedAccount<'info>,
+    #[account(mut, constraint = beneficiary_token_acc.owner == * beneficiary.key)]
+    pub beneficiary_token_acc: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
 }
 
 #[account]
@@ -145,17 +183,15 @@ pub struct VestingContract {
     /// Original amount deposited in the contract.
     pub deposited_amount: u64,
     //in smallest possible token denomination (e.g. lamports for SOL)
-    /// Amount of the tokens unlocked (vested)
-    pub unlocked: u64,
-    //can be derived from `deposited_amount` and `withdrawn`
     /// Amount of the tokens withdrawn from the contract
     pub withdrawn: u64,
+    /// Signer nonce.
+    pub nonce: u8,
     //   /// (optional) Vesting contract "cliff" timestamp
     // pub cliff: Option<u64>,
     //   /// (optional) Amount unlocked at the "cliff" timestamp
     // pub cliff_amount: Option<u64>,
     // pub fee: Option<FeeTier>, //todo not used atm, but test its behavior
-    // todo do we need nonce and/or seed?
     // todo need additional data?
 }
 
@@ -180,7 +216,7 @@ pub fn available(contract: &VestingContract, now: u64) -> u64 {
                   contract.deposited_amount)
 }
 
-pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &AccountInfo<'a>, token_program: &Program<'a, Token>, amount: u64) -> ProgramResult {
+pub fn transfer_tokens<'a, 'b, 'c>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &AccountInfo<'a>, token_program: &Program<'a, Token>, signer_seeds: &[&[& [u8]]], amount: u64) -> ProgramResult {
     let ix = spl_token::instruction::transfer(
         &spl_token::ID,
         &from.key(),
@@ -189,7 +225,7 @@ pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &
         &[],
         amount,
     )?;
-    invoke(
+    invoke_signed(
         &ix,
         &[
             //account order is important!
@@ -198,5 +234,20 @@ pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &
             auth.to_account_info(),
             token_program.to_account_info(),
         ],
+        signer_seeds,
     )
 }
+
+pub fn is_valid_schedule(start: u64, end: u64, now: u64) -> bool {
+    //we'll add more to it with the vesting periods
+    now < start && start < end
+}
+
+//todo use this
+// pub fn get_signer<'a, 'b, 'c>(pda: &Account<'static, VestingContract>) -> &'a[&'b[&'c[u8]]; 1] {
+//     let seeds = &[
+//         pda.to_account_info().key.as_ref(),
+//         &[pda.nonce],
+//     ];
+//     &[&seeds[..]]
+// }
