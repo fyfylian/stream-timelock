@@ -120,6 +120,13 @@ pub mod timelock {
         pda.withdrawn = pda.deposited_amount;
         Ok(())
     }
+
+    pub fn transfer(ctx: Context<Transfer>) -> ProgramResult {
+        let pda = &mut ctx.accounts.pda;
+        pda.beneficiary = ctx.accounts.new_beneficiary.key();
+
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -133,7 +140,7 @@ pub struct Create<'info> {
     #[account(mut)]
     pub depositor_token_acc: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
+    pub system_program: Program<'info, System>, //needed for acc init
 }
 
 #[derive(Accounts)]
@@ -148,7 +155,6 @@ pub struct Withdraw<'info> {
     pub beneficiary_token_acc: Account<'info, TokenAccount>,
     pub beneficiary: Signer<'info>,
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -166,7 +172,14 @@ pub struct Cancel<'info> {
     #[account(mut, constraint = beneficiary_token_acc.owner == * beneficiary.key)]
     pub beneficiary_token_acc: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Transfer<'info> {
+    #[account(mut, has_one = beneficiary)]
+    pub pda: Account<'info, VestingContract>,
+    pub beneficiary: Signer<'info>,
+    pub new_beneficiary: UncheckedAccount<'info>,
 }
 
 #[account]
@@ -250,7 +263,7 @@ pub fn is_valid_schedule(start: u64, end: u64, now: u64) -> bool {
     now < start && start < end
 }
 
-//todo use this
+//todo use this helper
 // pub fn get_signer<'a, 'b, 'c>(pda: &Account<'static, VestingContract>) -> &'a[&'b[&'c[u8]]; 1] {
 //     let seeds = &[
 //         pda.to_account_info().key.as_ref(),

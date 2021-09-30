@@ -2,6 +2,7 @@ const assert = require('assert')
 const anchor = require('@project-serum/anchor');
 const common = require('@project-serum/common');
 const {TOKEN_PROGRAM_ID} = require('@solana/spl-token')
+const {PublicKey} = require("@solana/web3.js");
 const {SystemProgram, Keypair} = anchor.web3;
 const {BN} = anchor;
 
@@ -75,8 +76,7 @@ describe('timelock', () => {
                     // await program.account.vestingContract.createInstruction(pda),
                     ...(await common.createTokenAccountInstrs(provider, pdaTokenAcc.publicKey, mint, pdaSigner))
                 ]
-            },
-        )
+            })
 
         const vault = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey)
         const depositor_token_acc = await program.provider.connection.getAccountInfo(depositorTokenAcc)
@@ -91,76 +91,91 @@ describe('timelock', () => {
         assert.ok(deposited_amount.toNumber() === pda_ata.amount);
     });
 
-    it("Withdraws from a contract", async () => {
-        setTimeout(async () => {
-            // beneficiaryTokenAcc = await utils.token.associatedAddress({mint, owner: beneficiary.publicKey})
-            //console.log('beneficiary ata', beneficiaryTokenAcc.toBase58())
-            beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey);
-            console.log('beneficiary ata 2', beneficiaryTokenAcc.toBase58())
+    // it("Withdraws from a contract", async () => {
+    //     setTimeout(async () => {
+    //         // beneficiaryTokenAcc = await utils.token.associatedAddress({mint, owner: beneficiary.publicKey})
+    //         //console.log('beneficiary ata', beneficiaryTokenAcc.toBase58())
+    //         beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey);
+    //         console.log('beneficiary ata 2', beneficiaryTokenAcc.toBase58())
+    //
+    //         const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
+    //         const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
+    //         const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
+    //         const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
+    //         const withdrawAmount = new BN(10);
+    //
+    //         console.log('pda sig', pdaSigner.toBase58(), 'pda', pda.publicKey.toBase58(), 'pda_ata_client', pdaTokenAcc.publicKey.toBase58(), 'pda_tok_acc', (await program.account.vestingContract.fetch(pda.publicKey)).pdaTokenAcc.toBase58())
+    //         console.log('seed', pda.publicKey.toBuffer())
+    //         const accounts = {
+    //             pda: pda.publicKey,
+    //             pdaTokenAcc: pdaTokenAcc.publicKey,
+    //             pdaSigner,
+    //             beneficiaryTokenAcc,
+    //             beneficiary: beneficiary.publicKey,
+    //             tokenProgram: TOKEN_PROGRAM_ID,
+    //         }
+    //
+    //         console.log('acc', accounts, 'PDA', pda.publicKey.toBase58())
+    //         await program.rpc.withdraw(withdrawAmount, {accounts})
+    //
+    //         const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
+    //         const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
+    //         const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
+    //         const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
+    //         const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
+    //         console.log('deposited_amount', pdaData.depositedAmount, 'withdrawn', pdaData.withdrawn, 'amount', withdrawAmount)
+    //         assert.ok(withdrawAmount.eq(new BN(oldPdaAmount - newPdaAmount)))
+    //         assert.ok(withdrawAmount.eq(new BN(newBeneficiaryAmount - oldBeneficiaryAmount)))
+    //         assert.ok(pdaData.withdrawn.eq(withdrawAmount))
+    //     }, 6000);
+    // });
+    //
+    // it("Cancels the stream", async () => {
+    //     setTimeout(async () => {
+    //         const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
+    //         const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
+    //         const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
+    //         const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
+    //
+    //         console.log('pdasig', pdaSigner, pda.publicKey)
+    //         await program.rpc.cancel({
+    //             accounts: {
+    //                 pda: pda.publicKey,
+    //                 pdaTokenAcc: pdaTokenAcc.publicKey,
+    //                 pdaSigner,
+    //                 beneficiary: beneficiary.publicKey,
+    //                 beneficiaryTokenAcc,
+    //                 depositor: depositor.publicKey,
+    //                 depositorTokenAcc,
+    //                 tokenProgram: TOKEN_PROGRAM_ID,
+    //             }
+    //         })
+    //
+    //         const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
+    //         const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
+    //         const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
+    //         const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
+    //         const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
+    //         console.log('deposited_amount', pdaData.depositedAmount.toNumber(), 'withdrawn', pdaData.withdrawn.toNumber(), 'beneficiary amount', newBeneficiaryAmount.toNumber())
+    //         assert.ok(newPdaAmount.toNumber() === 0)
+    //
+    //     }, 9000);
+    // });
 
-            const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-            const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
-            const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
-            const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
-            const withdrawAmount = new BN(10);
+    it("Transfers vesting contract ownership", async () => {
+        const oldBeneficiary = (await program.account.vestingContract.fetch(pda.publicKey)).beneficiary;
 
-            console.log('pda sig', pdaSigner.toBase58(), 'pda', pda.publicKey.toBase58(), 'pda_ata_client', pdaTokenAcc.publicKey.toBase58(), 'pda_tok_acc', (await program.account.vestingContract.fetch(pda.publicKey)).pdaTokenAcc.toBase58())
-            console.log('seed', pda.publicKey.toBuffer())
-            const accounts = {
+        await program.rpc.transfer({
+            accounts: {
                 pda: pda.publicKey,
-                pdaTokenAcc: pdaTokenAcc.publicKey,
-                pdaSigner,
-                beneficiaryTokenAcc,
                 beneficiary: beneficiary.publicKey,
-                tokenProgram: TOKEN_PROGRAM_ID,
-                systemProgram: SystemProgram.programId
+                newBeneficiary: new PublicKey("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
             }
+        })
 
-            console.log('acc', accounts, 'PDA', pda.publicKey.toBase58())
-            await program.rpc.withdraw(withdrawAmount, {accounts})
-
-            const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-            const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
-            const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
-            const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
-            const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
-            console.log('deposited_amount', pdaData.depositedAmount, 'withdrawn', pdaData.withdrawn, 'amount', withdrawAmount)
-            assert.ok(withdrawAmount.eq(new BN(oldPdaAmount - newPdaAmount)))
-            assert.ok(withdrawAmount.eq(new BN(newBeneficiaryAmount - oldBeneficiaryAmount)))
-            assert.ok(pdaData.withdrawn.eq(withdrawAmount))
-        }, 6000);
-    });
-
-    it("Cancels the stream", async () => {
-        setTimeout(async () => {
-            const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-            const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
-            const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
-            const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
-
-            console.log('pdasig', pdaSigner, pda.publicKey)
-            await program.rpc.cancel({
-                accounts: {
-                    pda: pda.publicKey,
-                    pdaTokenAcc: pdaTokenAcc.publicKey,
-                    pdaSigner,
-                    beneficiary: beneficiary.publicKey,
-                    beneficiaryTokenAcc,
-                    depositor: depositor.publicKey,
-                    depositorTokenAcc,
-                    tokenProgram: TOKEN_PROGRAM_ID,
-                    systemProgram: SystemProgram.programId,
-                }
-            })
-
-            const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-            const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
-            const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
-            const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
-            const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
-            console.log('deposited_amount', pdaData.depositedAmount.toNumber(), 'withdrawn', pdaData.withdrawn.toNumber(), 'beneficiary amount', newBeneficiaryAmount.toNumber())
-            assert.ok(newPdaAmount.toNumber() === 0)
-
-        }, 9000);
+        const newBeneficiary = (await program.account.vestingContract.fetch(pda.publicKey)).beneficiary;
+        console.log(oldBeneficiary.toBase58(), newBeneficiary.toBase58())
+        assert.ok(oldBeneficiary !== newBeneficiary)
+        assert.ok(newBeneficiary.toBase58() === "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
     });
 });
