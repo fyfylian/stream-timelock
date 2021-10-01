@@ -16,7 +16,10 @@ pub mod timelock {
         deposited_amount: u64,
         start: u64,
         end: u64,
+        period: u64,
         nonce: u8,
+        cliff: Option<u64>,
+        cliff_amount: Option<u64>,
     ) -> ProgramResult {
         let now = Clock::get()?.unix_timestamp as u64;
         let a = ctx.accounts;
@@ -26,7 +29,7 @@ pub mod timelock {
             return Err(VestingError::ZeroAmount.into());
         }
 
-        if !is_valid_schedule(start, end, now) {
+        if !is_valid_schedule(start, end, now, cliff) {
             return Err(VestingError::InvalidSchedule.into());
         }
 
@@ -39,7 +42,10 @@ pub mod timelock {
         pda.deposited_amount = deposited_amount;
         pda.start = start;
         pda.end = end;
+        pda.period = period;
         pda.nonce = nonce;
+        pda.cliff = cliff;
+        pda.cliff_amount = cliff_amount;
         pda.withdrawn = 0;
 
         let seeds = [
@@ -61,10 +67,6 @@ pub mod timelock {
         let now = Clock::get()?.unix_timestamp as u64;
         let a = ctx.accounts;
         let pda = &mut a.pda;
-
-        //todo check if this is already checked
-        if a.beneficiary.key() != pda.beneficiary
-            || a.pda_token_acc.key() != pda.pda_token_acc { Err(ProgramError::InvalidAccountData)? };
 
         let available = available(&pda, now);
         if amount > available { Err(ProgramError::InvalidArgument)? };
@@ -193,12 +195,12 @@ pub struct VestingContract {
     pub mint: Pubkey,
     /// SPL token address where tokens are deposited
     pub pda_token_acc: Pubkey,
-    /// Timestamp — when contract begins
+    /// Timestamp — vesting begins
     pub start: u64,
-    /// Timestamp — when tokens are fully vested
+    /// Timestamp — tokens are fully vested
     pub end: u64,
     /// Time step (period) per which the vesting occurs
-    // pub unlock_step: u64,
+    pub period: u64,
     /// Original amount deposited in the contract.
     pub deposited_amount: u64,
     //in smallest possible token denomination (e.g. lamports for SOL)
@@ -206,12 +208,12 @@ pub struct VestingContract {
     pub withdrawn: u64,
     /// Signer nonce.
     pub nonce: u8,
-    //   /// (optional) Vesting contract "cliff" timestamp
-    // pub cliff: Option<u64>,
-    //   /// (optional) Amount unlocked at the "cliff" timestamp
-    // pub cliff_amount: Option<u64>,
-    // pub fee: Option<FeeTier>, //todo not used atm, but test its behavior
-    // todo need additional data?
+    /// (optional) Vesting contract "cliff" timestamp
+    pub cliff: Option<u64>,
+    /// (optional) Amount unlocked at the "cliff" timestamp
+    pub cliff_amount: Option<u64>,
+    pub fee: Option<FeeTier>, //todo not used atm, but let's test it
+    // todo think about need additional data in order to keep the contract structure
 }
 
 #[error]
@@ -222,18 +224,28 @@ pub enum VestingError {
     ZeroAmount,
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub enum FeeTier {
+    Free,
+    LowestFee,
+    LowFee,
+    NormalFee,
+}
+
 //todo move to a separate file
 pub fn available(contract: &VestingContract, now: u64) -> u64 {
-    if contract.start > now { return 0; }
+    if contract.start > now || contract.cliff.unwrap() > now { return 0; }
+    if now >= contract.end { return contract.deposited_amount; }
 
-    // (now - start) / (end - start) * deposited_amount - withdrawn
+    //set default values if not set
+    let cliff = contract.cliff.unwrap_or(contract.start);
+    let cliff_amount = contract.cliff_amount.unwrap_or(0);
     //todo: floats are imprecise, use integer division (requires witty solutions, adds complexity)
     //todo need checked math bcs of under/overflow
-    let percent_unlocked = ((now - contract.start) as f64) / ((contract.end - contract.start) as f64);
-
-    std::cmp::min(((percent_unlocked * contract.deposited_amount as f64) as u64)
-                      .checked_sub(contract.withdrawn).unwrap(),
-                  contract.deposited_amount)
+    let num_periods = (contract.end - cliff) as f64 / contract.period as f64;
+    let period_amount = (contract.deposited_amount - cliff_amount) as f64 / num_periods;
+    let periods_passed: u64 = (now - cliff) / contract.period;
+    return (periods_passed as f64 * period_amount) as u64 + cliff_amount - contract.withdrawn;
 }
 
 pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &AccountInfo<'a>, token_program: &Program<'a, Token>, signer_seeds: &[&[&[u8]]], amount: u64) -> ProgramResult {
@@ -258,9 +270,10 @@ pub fn transfer_tokens<'a>(from: &AccountInfo<'a>, to: &AccountInfo<'a>, auth: &
     )
 }
 
-pub fn is_valid_schedule(start: u64, end: u64, now: u64) -> bool {
+pub fn is_valid_schedule(start: u64, end: u64, now: u64, cliff: Option<u64>) -> bool {
     //we'll add more to it with the vesting periods
-    now < start && start < end
+    let cliff_condition = if cliff.is_none() { true } else { start <= cliff.unwrap() && cliff.unwrap() <= end };
+    now < start && start < end && cliff_condition
 }
 
 //todo use this helper
