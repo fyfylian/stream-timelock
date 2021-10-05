@@ -15,6 +15,9 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.16.1"
-anchor-spl = "0.16.1"
-spl-token = "3.2.0"
+anchor-lang = "0.17.0"
+anchor-spl = "0.17.0"
+
+[dependencies.streamflow-timelock]
+git = "https://github.com/streamflow-finance/streamflow-timelock"
+rev = "4f35b8132882711e19797f691cb13cd522a30ee1"
