@@ -29,10 +29,10 @@
     "snake-case" "^3.0.4"
     "toml" "^3.0.0"
 
-"@project-serum/anchor@^0.16.1":
-  "integrity" "sha512-nbpxo5xgENkdDqfRBMMhCqicj9Mc3QcGFOy1cl5j7uYqvFjdOfkOMcP19sf6/m4wmgaclfiYfWeHALy7XDOubQ=="
-  "resolved" "https://registry.npmjs.org/@project-serum/anchor/-/anchor-0.16.1.tgz"
-  "version" "0.16.1"
+"@project-serum/anchor@^0.16.2":
+  "integrity" "sha512-wOJwObd4wOZ5tRRMCKYjeMNsEmf7vuC71KQRnw6wthhErL8c/818n4gYIZCf/1ZPl/8WPruIlmtQHDSEyy2+0Q=="
+  "resolved" "https://registry.npmjs.org/@project-serum/anchor/-/anchor-0.16.2.tgz"
+  "version" "0.16.2"
   dependencies:
     "@project-serum/borsh" "^0.2.2"
     "@solana/web3.js" "^1.17.0"
@@ -786,11 +786,6 @@
   "integrity" "sha1-FQStJSMVjKpA20onh8sBQRmU6k8="
   "resolved" "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
   "version" "1.0.0"
-
-"fsevents@~2.3.2":
-  "integrity" "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA=="
-  "resolved" "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz"
-  "version" "2.3.2"
 
 "function-bind@^1.1.1":
   "integrity" "sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A=="

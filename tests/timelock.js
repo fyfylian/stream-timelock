@@ -1,70 +1,97 @@
 const assert = require('assert')
 const anchor = require('@project-serum/anchor');
 const common = require('@project-serum/common');
-const {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, Token} = require('@solana/spl-token')
-const {PublicKey, SYSVAR_RENT_PUBKEY} = require("@solana/web3.js");
-const {min} = require("mocha/lib/reporters");
-const {utils} = require("@project-serum/anchor");
-const {SystemProgram, Keypair} = anchor.web3;
-const {BN} = anchor;
+const {
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    Token
+} = require('@solana/spl-token')
+const {
+    PublicKey,
+    SYSVAR_RENT_PUBKEY
+} = require("@solana/web3.js");
+const {
+    min
+} = require("mocha/lib/reporters");
+const {
+    utils
+} = require("@project-serum/anchor");
+const {
+    SystemProgram,
+    Keypair
+} = anchor.web3;
+const {
+    BN
+} = anchor;
+
+// The stream recipient main wallet
+const recipient = Keypair.generate();
 
 describe('timelock', () => {
-    const provider = anchor.Provider.local();//todo use env()
+    const provider = anchor.Provider.local(); //todo use env()
     anchor.setProvider(provider);
 
-    //accounts
+    // Accounts
     const program = anchor.workspace.Timelock;
     const sender = provider.wallet;
     const metadata = Keypair.generate();
-    let escrowTokens;
-    let recipientTokens;
     // const escrowCliff = Keypair.generate();
     // const escrowCliffTokens = Keypair.generate();
-    const recipient = provider.wallet; //todo uescrowte to something else, e.g. known address or Keypair.generate();
-
+    let escrowTokens;
+    let recipientTokens;
+    let nonce;
     let mint;
     let senderTokens;
-    //
-    // let escrowSigner; //needed to sign transactions in the name of metadata account during withdrawal/cancel.
+
+    // Needed to sign transactions in the name of metadata account during withdrawal/cancel.
+    // let escrowSigner; 
     // let escrowCliffSigner;
 
-    const start = new BN(+new Date() / 1000 + 5); //divide by 1000 since unix timestamp is in seconds and add 5 seconds
-    const end = new BN((+new Date()) / 1000 + 60); //one min later
-    const period = new BN(10);//defaults to 1 second
+    // Divide by 1000 since Unix timestamp is seconds, and add 5s
+    const start = new BN(+new Date() / 1000 + 5);
+    // +60 seconds
+    const end = new BN((+new Date()) / 1000 + 60);
+    // Defaults to 1s
+    const period = new BN(10);
+    // Amount to deposit
     const depositedAmount = new BN(1337);
 
+
     it("Initialize test state", async () => {
-        const [_mint, _mint_authority] = await common.createMintAndVault(
+        [mint, senderTokens] = await common.createMintAndVault(
             provider,
             new anchor.BN(10_000)
         );
-        mint = _mint;
-        senderTokens = _mint_authority;
 
-        const [_escrowTokens, nonce] = await PublicKey.findProgramAddress([metadata.publicKey.toBuffer()], program.programId)
-        escrowTokens = _escrowTokens;
-        recipientTokens = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, mint, recipient.publicKey)
-        const _recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
-        console.log(_recipientTokens.toBase58(), recipientTokens.toBase58())
-        console.log('associated token program', ASSOCIATED_TOKEN_PROGRAM_ID)
-        console.log('recipient', recipient.publicKey.toBase58())
-        console.log('recipient', recipient.publicKey.toBase58())
-        console.log('program ID', program.programId.toBase58())
-        console.log('mint', mint.toBase58())
-        console.log('rec tokens',recipientTokens.toBase58())
+        [escrowTokens, nonce] = await PublicKey.findProgramAddress(
+            [metadata.publicKey.toBuffer()],
+            program.programId);
+
+        recipientTokens = await Token.getAssociatedTokenAddress(
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+            TOKEN_PROGRAM_ID,
+            mint,
+            recipient.publicKey);
+
+        console.log('associated token program:', ASSOCIATED_TOKEN_PROGRAM_ID.toString())
+        console.log('recipient wallet:', recipient.publicKey.toBase58())
+        console.log('recipient tokens:', recipientTokens.toBase58())
+        console.log('program ID:', program.programId.toBase58())
+        console.log('mint:', mint.toBase58())
     })
 
     it("Create Vesting Contract w/out the cliff", async () => {
-        console.log('metadata', metadata.publicKey.toBase58(), 'buffer', metadata.publicKey.toBuffer())
-        
+        console.log('metadata:', metadata.publicKey.toBase58());
+        console.log('buffer:', metadata.publicKey.toBuffer());
+
         const tx = await program.rpc.create(
-            //order of the parameters must match the ones in the program
+            // Order of the parameters must match the ones in the program
             depositedAmount,
             start,
             end,
             period,
-            new BN(0),//cliff
-            new BN(0),//cliff amount
+            new BN(0), //cliff
+            new BN(0), //cliff amount
             {
                 accounts: {
                     sender: sender.publicKey,
@@ -81,17 +108,23 @@ describe('timelock', () => {
                     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID
                 },
                 signers: [metadata, sender.payer],
-            })
+            });
 
-        const _escrowTokens = await program.provider.connection.getAccountInfo(escrowTokens)
-        const _senderTokens = await program.provider.connection.getAccountInfo(senderTokens)
+        const _escrowTokens = await program.provider.connection.getAccountInfo(escrowTokens);
+        const _senderTokens = await program.provider.connection.getAccountInfo(senderTokens);
 
-        const _metadata = await program.provider.connection.getAccountInfo(metadata.publicKey)
+        const _metadata = await program.provider.connection.getAccountInfo(metadata.publicKey);
         const _escrowTokensData = common.token.parseTokenAccountData(_escrowTokens.data);
         const _senderTokensData = common.token.parseTokenAccountData(_senderTokens.data);
 
-        console.log('metadata', _metadata.data, 'escrow tokens', _escrowTokensData, 'senderTokens', _senderTokensData)
-        console.log('deposited during contract creation: ', depositedAmount.toNumber(), _escrowTokensData.amount)
+        console.log('metadata', _metadata.data,
+            'escrow tokens', _escrowTokensData,
+            'senderTokens', _senderTokensData);
+
+        console.log('deposited during contract creation: ',
+            depositedAmount.toNumber(),
+            _escrowTokensData.amount);
+
         assert.ok(depositedAmount.toNumber() === _escrowTokensData.amount);
     });
 

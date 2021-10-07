@@ -1153,8 +1153,8 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "streamflow-timelock"
-version = "0.1.1"
-source = "git+https://github.com/streamflow-finance/streamflow-timelock?rev=4f35b8132882711e19797f691cb13cd522a30ee1#4f35b8132882711e19797f691cb13cd522a30ee1"
+version = "0.2.0"
+source = "git+https://github.com/streamflow-finance/streamflow-timelock?rev=fde37d1802c830c1edf108b9d15ca645411a9f11#fde37d1802c830c1edf108b9d15ca645411a9f11"
 dependencies = [
  "bincode",
  "serde",
