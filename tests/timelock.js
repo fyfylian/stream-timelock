@@ -1,8 +1,10 @@
 const assert = require('assert')
 const anchor = require('@project-serum/anchor');
 const common = require('@project-serum/common');
-const {TOKEN_PROGRAM_ID} = require('@solana/spl-token')
-const {PublicKey} = require("@solana/web3.js");
+const {TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, Token} = require('@solana/spl-token')
+const {PublicKey, SYSVAR_RENT_PUBKEY} = require("@solana/web3.js");
+const {min} = require("mocha/lib/reporters");
+const {utils} = require("@project-serum/anchor");
 const {SystemProgram, Keypair} = anchor.web3;
 const {BN} = anchor;
 
@@ -11,24 +13,24 @@ describe('timelock', () => {
     anchor.setProvider(provider);
 
     //accounts
-    const depositor = provider.wallet;
     const program = anchor.workspace.Timelock;
-    const pda = Keypair.generate();
-    const pdaCliff = Keypair.generate();
-    const pdaTokenAcc = Keypair.generate();
-    const pdaCliffTokenAcc = Keypair.generate();
-    const beneficiary = provider.wallet; //todo update to something else, e.g. known address or Keypair.generate();
+    const sender = provider.wallet;
+    const metadata = Keypair.generate();
+    let escrowTokens;
+    let recipientTokens;
+    // const escrowCliff = Keypair.generate();
+    // const escrowCliffTokens = Keypair.generate();
+    const recipient = provider.wallet; //todo uescrowte to something else, e.g. known address or Keypair.generate();
 
     let mint;
-    let depositorTokenAcc;
-    let beneficiaryTokenAcc;
-
-    let pdaSigner; //needed to sign transactions in the name of PDA account during withdrawal/cancel.
-    let pdaCliffSigner;
+    let senderTokens;
+    //
+    // let escrowSigner; //needed to sign transactions in the name of metadata account during withdrawal/cancel.
+    // let escrowCliffSigner;
 
     const start = new BN(+new Date() / 1000 + 5); //divide by 1000 since unix timestamp is in seconds and add 5 seconds
     const end = new BN((+new Date()) / 1000 + 60); //one min later
-    const period = period || new BN(1);//defaults to 1 second
+    const period = new BN(10);//defaults to 1 second
     const depositedAmount = new BN(1337);
 
     it("Initialize test state", async () => {
@@ -37,202 +39,147 @@ describe('timelock', () => {
             new anchor.BN(10_000)
         );
         mint = _mint;
-        depositorTokenAcc = _mint_authority;
+        senderTokens = _mint_authority;
 
-        // must check if the associated token account already exists
-        // pdaTokenAcc = await common.createTokenAccount(provider, mint, pda.publicKey)
-        // todo ne kreira se ovde
-        // beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey)
-        // should we use anchor.utils.token.associatedAddress()?
+        const [_escrowTokens, nonce] = await PublicKey.findProgramAddress([metadata.publicKey.toBuffer()], program.programId)
+        escrowTokens = _escrowTokens;
+        recipientTokens = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, mint, recipient.publicKey)
+        _recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
+        console.log(_recipientTokens.toBase58(), recipientTokens.toBase58())
+        console.log('associated token program', ASSOCIATED_TOKEN_PROGRAM_ID)
+        console.log('recipient', recipient.publicKey.toBase58())
+        console.log('recipient', recipient.publicKey.toBase58())
+        console.log('program ID', program.programId.toBase58())
+        console.log('mint', mint.toBase58())
+        console.log('rec tokens',recipientTokens.toBase58())
     })
 
     it("Create Vesting Contract w/out the cliff", async () => {
-        //if seeds are known, signer can be derived.
-        let [_pdaSigner, nonce] = await anchor.web3.PublicKey.findProgramAddress(
-            [pda.publicKey.toBuffer()],//(Seeds can be anything but we decided those will be serialized pda's pubkey
-            program.programId
-        );
-
-        pdaSigner = _pdaSigner;
-        console.log('pdasig', pdaSigner.toBase58(), 'pda', pda.publicKey.toBase58(), 'buffer', pda.publicKey.toBuffer())
-        console.log('nonce', nonce);
-
+        console.log('metadata', metadata.publicKey.toBase58(), 'buffer', metadata.publicKey.toBuffer())
         
         const tx = await program.rpc.create(
-            //order of the parameters must match the ones in program
-            beneficiary.publicKey, //beneficiary
+            //order of the parameters must match the ones in the program
             depositedAmount,
             start,
             end,
             period,
-            nonce,
-            null,
-            null,
+            new BN(0),//cliff
+            new BN(0),//cliff amount
             {
                 accounts: {
-                    pda: pda.publicKey,
-                    pdaSigner,
-                    pdaTokenAcc: pdaTokenAcc.publicKey,
-                    depositorTokenAcc,
-                    depositor: depositor.publicKey,
+                    sender: sender.publicKey,
+                    senderTokens,
+                    recipient: recipient.publicKey,
+                    recipientTokens,
+                    metadata: metadata.publicKey,
+                    escrowTokens,
+                    mint,
+                    rent: SYSVAR_RENT_PUBKEY,
+                    timelockProgram: program.programId,
                     tokenProgram: TOKEN_PROGRAM_ID,
-                    systemProgram: SystemProgram.programId
-                },
-                signers: [pda, pdaTokenAcc],
-                instructions: [
-                    // await program.account.vestingContract.createInstruction(pda),
-                    ...(await common.createTokenAccountInstrs(provider, pdaTokenAcc.publicKey, mint, pdaSigner))
-                ]
-            })
-
-        const vault = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey)
-        const depositor_token_acc = await program.provider.connection.getAccountInfo(depositorTokenAcc)
-
-        const acc = await program.account.vestingContract.fetch(pda.publicKey)
-        const pda_ata = common.token.parseTokenAccountData(vault.data);
-        const dep_ata = common.token.parseTokenAccountData(depositor_token_acc.data)
-        // console.log('contract', acc,
-        //     'pda ata', pda_ata,
-        //     'dep ata', dep_ata);
-        console.log('deposited during contract creation: ', depositedAmount.toNumber(), pda_ata.amount)
-        assert.ok(depositedAmount.toNumber() === pda_ata.amount);
-    });
-
-    it("Create Vesting Contract with the cliff", async () => {
-        const cliff = start.add(new BN(20));
-        const cliffAmount = 
-        //if seeds are known, signer can be derived.
-        let [_pdaSigner, nonce] = await anchor.web3.PublicKey.findProgramAddress(
-            [pdaCliff.publicKey.toBuffer()],//(Seeds can be anything but we decided those will be serialized pda's pubkey
-            program.programId
-        );
-
-        pdaCliffSigner = _pdaSigner;
-
-        const tx = await program.rpc.create(
-            //order of the parameters must match the ones in program
-            beneficiary.publicKey,
-            depositedAmount,
-            start,
-            end,
-            period,
-            nonce,
-            cliff,
-            cliff_amount,
-            {
-                accounts: {
-                    pda: pda.publicKey,
-                    pdaSigner,
-                    pdaTokenAcc: pdaTokenAcc.publicKey,
-                    depositorTokenAcc,
-                    depositor: depositor.publicKey,
                     systemProgram: SystemProgram.programId,
-                    tokenProgram: TOKEN_PROGRAM_ID
+                    associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID
                 },
-                signers: [pda, pdaTokenAcc],
-                instructions: [
-                    // await program.account.vestingContract.createInstruction(pda),
-                    ...(await common.createTokenAccountInstrs(provider, pdaTokenAcc.publicKey, mint, pdaSigner))
-                ]
+                signers: [metadata, sender.payer],
             })
 
-        const vault = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey)
-        const depositor_token_acc = await program.provider.connection.getAccountInfo(depositorTokenAcc)
+        const _escrowTokens = await program.provider.connection.getAccountInfo(escrowTokens.publicKey)
+        const _senderTokens = await program.provider.connection.getAccountInfo(senderTokens.publicKey)
 
-        const acc = await program.account.vestingContract.fetch(pda.publicKey)
-        const pda_ata = common.token.parseTokenAccountData(vault.data);
-        const dep_ata = common.token.parseTokenAccountData(depositor_token_acc.data)
-        // console.log('contract', acc,
-        //     'pda ata', pda_ata,
-        //     'dep ata', dep_ata);
-        console.log('deposited during contract creation: ', depositedAmount.toNumber(), pda_ata.amount)
-        assert.ok(depositedAmount.toNumber() === pda_ata.amount);
+        const _metadata = await program.provider.connection.getAccountInfo(metadata.publicKey)
+        const _escrowTokensData = common.token.parseTokenAccountData(_escrowTokens.data);
+        const _senderTokensData = common.token.parseTokenAccountData(_senderTokens.data);
+
+        console.log('metadata', _metadata.data, 'escrow tokens', _escrowTokensData, 'senderTokens', _senderTokensData)
+        console.log('deposited during contract creation: ', depositedAmount.toNumber(), _escrowTokensData.amount)
+        assert.ok(depositedAmount.toNumber() === _escrowTokensData.amount);
     });
+
     // it("Withdraws from a contract", async () => {
     //     setTimeout(async () => {
-    //         // beneficiaryTokenAcc = await utils.token.associatedAddress({mint, owner: beneficiary.publicKey})
-    //         //console.log('beneficiary ata', beneficiaryTokenAcc.toBase58())
-    //         beneficiaryTokenAcc = await common.createTokenAccount(provider, mint, beneficiary.publicKey);
-    //         console.log('beneficiary ata 2', beneficiaryTokenAcc.toBase58())
+    //         // recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
+    //         //console.log('recipient ata', recipientTokens.toBase58())
+    //         recipientTokens = await common.createTokensount(provider, mint, recipient.publicKey);
+    //         console.log('recipient ata 2', recipientTokens.toBase58())
     //
-    //         const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-    //         const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
-    //         const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
-    //         const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
+    //         const oldescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
+    //         const oldescrowAmount = common.token.parseTokensountData(oldescrowAta.data).amount;
+    //         const oldrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens)
+    //         const oldrecipientAmount = common.token.parseTokensountData(oldrecipientAta.data).amount;
     //         const withdrawAmount = new BN(10);
     //
-    //         console.log('pda sig', pdaSigner.toBase58(), 'pda', pda.publicKey.toBase58(), 'pda_ata_client', pdaTokenAcc.publicKey.toBase58(), 'pda_tok_acc', (await program.account.vestingContract.fetch(pda.publicKey)).pdaTokenAcc.toBase58())
-    //         console.log('seed', pda.publicKey.toBuffer())
+    //         console.log('metadata sig', escrowSigner.toBase58(), 'metadata', metadata.publicKey.toBase58(), 'escrow_ata_client', escrowTokens.publicKey.toBase58(), 'escrow_tok_acc', (await program.account.vestingContract.fetch(metadata.publicKey)).escrowTokens.toBase58())
+    //         console.log('seed', metadata.publicKey.toBuffer())
     //         const accounts = {
-    //             pda: pda.publicKey,
-    //             pdaTokenAcc: pdaTokenAcc.publicKey,
-    //             pdaSigner,
-    //             beneficiaryTokenAcc,
-    //             beneficiary: beneficiary.publicKey,
+    //             metadata: metadata.publicKey,
+    //             escrowTokens: escrowTokens.publicKey,
+    //             escrowSigner,
+    //             recipientTokens,
+    //             recipient: recipient.publicKey,
     //             tokenProgram: TOKEN_PROGRAM_ID,
     //         }
     //
-    //         console.log('acc', accounts, 'PDA', pda.publicKey.toBase58())
+    //         console.log('acc', accounts, 'metadata', metadata.publicKey.toBase58())
     //         await program.rpc.withdraw(withdrawAmount, {accounts})
     //
-    //         const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-    //         const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
-    //         const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
-    //         const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
-    //         const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
-    //         console.log('depositedAmount', pdaData.depositedAmount, 'withdrawn', pdaData.withdrawn, 'amount', withdrawAmount)
-    //         assert.ok(withdrawAmount.eq(new BN(oldPdaAmount - newPdaAmount)))
-    //         assert.ok(withdrawAmount.eq(new BN(newBeneficiaryAmount - oldBeneficiaryAmount)))
-    //         assert.ok(pdaData.withdrawn.eq(withdrawAmount))
+    //         const newescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
+    //         const newescrowAmount = common.token.parseTokensountData(newescrowAta.data).amount;
+    //         const newrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens);
+    //         const newrecipientAmount = common.token.parseTokensountData(newrecipientAta.data).amount;
+    //         const escrowData = (await program.account.vestingContract.fetch(metadata.publicKey));
+    //         console.log('depositedAmount', escrowData.depositedAmount, 'withdrawn', escrowData.withdrawn, 'amount', withdrawAmount)
+    //         assert.ok(withdrawAmount.eq(new BN(oldescrowAmount - newescrowAmount)))
+    //         assert.ok(withdrawAmount.eq(new BN(newrecipientAmount - oldrecipientAmount)))
+    //         assert.ok(escrowData.withdrawn.eq(withdrawAmount))
     //     }, 6000);
     // });
     //
     // it("Cancels the stream", async () => {
     //     setTimeout(async () => {
-    //         const oldPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-    //         const oldPdaAmount = common.token.parseTokenAccountData(oldPdaAta.data).amount;
-    //         const oldBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc)
-    //         const oldBeneficiaryAmount = common.token.parseTokenAccountData(oldBeneficiaryAta.data).amount;
+    //         const oldescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
+    //         const oldescrowAmount = common.token.parseTokensountData(oldescrowAta.data).amount;
+    //         const oldrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens)
+    //         const oldrecipientAmount = common.token.parseTokensountData(oldrecipientAta.data).amount;
     //
-    //         console.log('pdasig', pdaSigner, pda.publicKey)
+    //         console.log('escrowsig', escrowSigner, metadata.publicKey)
     //         await program.rpc.cancel({
     //             accounts: {
-    //                 pda: pda.publicKey,
-    //                 pdaTokenAcc: pdaTokenAcc.publicKey,
-    //                 pdaSigner,
-    //                 beneficiary: beneficiary.publicKey,
-    //                 beneficiaryTokenAcc,
-    //                 depositor: depositor.publicKey,
-    //                 depositorTokenAcc,
+    //                 metadata: metadata.publicKey,
+    //                 escrowTokens: escrowTokens.publicKey,
+    //                 escrowSigner,
+    //                 recipient: recipient.publicKey,
+    //                 recipientTokens,
+    //                 sender: sender.publicKey,
+    //                 senderTokens,
     //                 tokenProgram: TOKEN_PROGRAM_ID,
     //             }
     //         })
     //
-    //         const newPdaAta = await program.provider.connection.getAccountInfo(pdaTokenAcc.publicKey);
-    //         const newPdaAmount = common.token.parseTokenAccountData(newPdaAta.data).amount;
-    //         const newBeneficiaryAta = await program.provider.connection.getAccountInfo(beneficiaryTokenAcc);
-    //         const newBeneficiaryAmount = common.token.parseTokenAccountData(newBeneficiaryAta.data).amount;
-    //         const pdaData = (await program.account.vestingContract.fetch(pda.publicKey));
-    //         console.log('depositedAmount', pdaData.depositedAmount.toNumber(), 'withdrawn', pdaData.withdrawn.toNumber(), 'beneficiary amount', newBeneficiaryAmount.toNumber())
-    //         assert.ok(newPdaAmount.toNumber() === 0)
+    //         const newescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
+    //         const newescrowAmount = common.token.parseTokensountData(newescrowAta.data).amount;
+    //         const newrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens);
+    //         const newrecipientAmount = common.token.parseTokensountData(newrecipientAta.data).amount;
+    //         const escrowData = (await program.account.vestingContract.fetch(metadata.publicKey));
+    //         console.log('depositedAmount', escrowData.depositedAmount.toNumber(), 'withdrawn', escrowData.withdrawn.toNumber(), 'recipient amount', newrecipientAmount.toNumber())
+    //         assert.ok(newescrowAmount.toNumber() === 0)
     //
     //     }, 9000);
     // });
 
-    it("Transfers vesting contract ownership", async () => {
-        const oldBeneficiary = (await program.account.vestingContract.fetch(pda.publicKey)).beneficiary;
-
-        await program.rpc.transfer({
-            accounts: {
-                pda: pda.publicKey,
-                beneficiary: beneficiary.publicKey,
-                newBeneficiary: new PublicKey("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
-            }
-        })
-
-        const newBeneficiary = (await program.account.vestingContract.fetch(pda.publicKey)).beneficiary;
-        console.log(oldBeneficiary.toBase58(), newBeneficiary.toBase58())
-        assert.ok(oldBeneficiary !== newBeneficiary)
-        assert.ok(newBeneficiary.toBase58() === "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
-    });
+    // it("Transfers vesting contract ownership", async () => {
+    //     const oldrecipient = (await program.account.vestingContract.fetch(metadata.publicKey)).recipient;
+    //
+    //     await program.rpc.transfer({
+    //         accounts: {
+    //             metadata: metadata.publicKey,
+    //             recipient: recipient.publicKey,
+    //             newrecipient: new PublicKey("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
+    //         }
+    //     })
+    //
+    //     const newrecipient = (await program.account.vestingContract.fetch(metadata.publicKey)).recipient;
+    //     console.log(oldrecipient.toBase58(), newrecipient.toBase58())
+    //     assert.ok(oldrecipient !== newrecipient)
+    //     assert.ok(newrecipient.toBase58() === "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS")
+    // });
 });

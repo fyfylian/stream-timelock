@@ -1,17 +1,19 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use streamflow_timelock::{
     associated_token::{cancel_token_stream, initialize_token_stream, withdraw_token_stream},
     state::{CancelAccounts, InitializeAccounts, StreamInstruction, WithdrawAccounts},
 };
+use anchor_spl::associated_token::AssociatedToken;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod timelock {
     use super::*;
+    use streamflow_timelock::state::TransferAccounts;
+    use streamflow_timelock::associated_token::update_recipient;
 
     pub fn create(
         ctx: Context<Create>,
@@ -32,21 +34,17 @@ pub mod timelock {
         };
 
         let acc = InitializeAccounts {
-            sender_wallet: ctx.accounts.sender_wallet.to_account_info(),
+            sender: ctx.accounts.sender.to_account_info(),
             sender_tokens: ctx.accounts.sender_tokens.to_account_info(),
-            recipient_wallet: ctx.accounts.recipient_wallet.to_account_info(),
+            recipient: ctx.accounts.recipient.to_account_info(),
             recipient_tokens: ctx.accounts.recipient_tokens.to_account_info(),
-            metadata_account: ctx.accounts.metadata_account.to_account_info(),
-            escrow_account: ctx.accounts.escrow_account.to_account_info(),
-            mint_account: ctx.accounts.mint_account.to_account_info(),
-            rent_account: ctx.accounts.rent_account.to_account_info(),
-            timelock_program_account: ctx.accounts.timelock_program_account.to_account_info(),
-            token_program_account: ctx.accounts.token_program_account.to_account_info(),
-            associated_token_program_account: ctx
-                .accounts
-                .associated_token_program_account
-                .to_account_info(),
-            system_program_account: ctx.accounts.system_program_account.to_account_info(),
+            metadata: ctx.accounts.metadata.to_account_info(),
+            escrow_tokens: ctx.accounts.escrow_tokens.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+            rent: ctx.accounts.rent.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
+            associated_token_program: ctx.accounts.associated_token_program.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
         };
 
         initialize_token_stream(ctx.program_id, acc, ix)
@@ -54,16 +52,12 @@ pub mod timelock {
 
     pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> ProgramResult {
         let acc = WithdrawAccounts {
-            sender_wallet: ctx.accounts.sender_wallet.to_account_info(),
-            sender_tokens: ctx.accounts.sender_tokens.to_account_info(),
-            recipient_wallet: ctx.accounts.recipient_wallet.to_account_info(),
+            recipient: ctx.accounts.recipient.to_account_info(),
             recipient_tokens: ctx.accounts.recipient_tokens.to_account_info(),
-            metadata_account: ctx.accounts.metadata_account.to_account_info(),
-            escrow_account: ctx.accounts.metadata_account.to_account_info(),
-            mint_account: ctx.accounts.mint_account.to_account_info(),
-            timelock_program_account: ctx.accounts.timelock_program_account.to_account_info(),
-            token_program_account: ctx.accounts.token_program_account.to_account_info(),
-            system_program_account: ctx.accounts.system_program_account.to_account_info(),
+            metadata: ctx.accounts.metadata.to_account_info(),
+            escrow_tokens: ctx.accounts.escrow_tokens.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
         };
 
         withdraw_token_stream(ctx.program_id, acc, amount)
@@ -71,94 +65,105 @@ pub mod timelock {
 
     pub fn cancel(ctx: Context<Cancel>) -> ProgramResult {
         let acc = CancelAccounts {
-            sender_wallet: ctx.accounts.sender_wallet.to_account_info(),
+            sender: ctx.accounts.sender.to_account_info(),
             sender_tokens: ctx.accounts.sender_tokens.to_account_info(),
-            recipient_wallet: ctx.accounts.recipient_wallet.to_account_info(),
+            recipient: ctx.accounts.recipient.to_account_info(),
             recipient_tokens: ctx.accounts.recipient_tokens.to_account_info(),
-            metadata_account: ctx.accounts.metadata_account.to_account_info(),
-            escrow_account: ctx.accounts.metadata_account.to_account_info(),
-            mint_account: ctx.accounts.mint_account.to_account_info(),
-            timelock_program_account: ctx.accounts.timelock_program_account.to_account_info(),
-            token_program_account: ctx.accounts.token_program_account.to_account_info(),
-            system_program_account: ctx.accounts.system_program_account.to_account_info(),
+            metadata: ctx.accounts.metadata.to_account_info(),
+            escrow_tokens: ctx.accounts.escrow_tokens.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
+        };
+        cancel_token_stream(ctx.program_id, acc)
+    }
+
+    pub fn transfer(ctx: Context<Transfer>) -> ProgramResult {
+        let acc = TransferAccounts {
+            existing_recipient: ctx.accounts.existing_recipient.to_account_info(),
+            new_recipient: ctx.accounts.new_recipient.to_account_info(),
+            new_recipient_tokens: ctx.accounts.new_recipient_tokens.to_account_info(),
+            metadata: ctx.accounts.metadata.to_account_info(),
+            escrow_tokens: ctx.accounts.escrow_tokens.to_account_info(),
+            mint: ctx.accounts.mint.to_account_info(),
+            rent: ctx.accounts.rent.to_account_info(),
+            token_program: ctx.accounts.token_program.to_account_info(),
+            associated_token_program: ctx.accounts.associated_token_program.to_account_info(),
+            system_program: ctx.accounts.system.to_account_info(),
         };
 
-        cancel_token_stream(ctx.program_id, acc)
+        update_recipient(ctx.program_id, acc)
     }
 }
 
 #[derive(Accounts)]
 pub struct Create<'info> {
     #[account(mut)]
-    pub sender_wallet: AccountInfo<'info>,
+    pub sender: Signer<'info>,
     #[account(mut)]
-    pub sender_tokens: Account<'info, TokenAccount>,
+    pub sender_tokens: AccountInfo<'info>,
     #[account(mut)]
-    pub recipient_wallet: AccountInfo<'info>,
+    pub recipient: AccountInfo<'info>,
     #[account(mut)]
-    pub recipient_tokens: Account<'info, TokenAccount>,
+    pub recipient_tokens: AccountInfo<'info>,
+    #[account(mut, signer)]
+    pub metadata: AccountInfo<'info>,
     #[account(mut)]
-    pub metadata_account: AccountInfo<'info>,
-    #[account(mut)]
-    pub escrow_account: Account<'info, TokenAccount>,
-    #[account()]
-    pub mint_account: ProgramAccount<'info, Mint>,
-    #[account()]
-    pub rent_account: Sysvar<'info, Rent>,
-    #[account()]
-    pub timelock_program_account: AccountInfo<'info>,
-    #[account()]
-    pub token_program_account: Program<'info, Token>,
-    #[account()]
-    pub associated_token_program_account: Program<'info, AssociatedToken>,
-    #[account()]
-    pub system_program_account: Program<'info, System>,
+    pub escrow_tokens: AccountInfo<'info>,
+    pub mint: Account<'info, Mint>,
+    pub rent: Sysvar<'info, Rent>,
+    pub timelock_program: AccountInfo<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
     #[account(mut)]
-    pub sender_wallet: AccountInfo<'info>,
-    #[account(mut)]
-    pub sender_tokens: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub recipient_wallet: AccountInfo<'info>,
+    pub recipient: Signer<'info>,
     #[account(mut)]
     pub recipient_tokens: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub metadata_account: AccountInfo<'info>,
+    pub metadata: AccountInfo<'info>,
     #[account(mut)]
-    pub escrow_account: Account<'info, TokenAccount>,
-    #[account()]
-    pub mint_account: ProgramAccount<'info, Mint>,
-    #[account()]
-    pub timelock_program_account: AccountInfo<'info>,
-    #[account()]
-    pub token_program_account: Program<'info, Token>,
-    #[account()]
-    pub system_program_account: Program<'info, System>,
+    pub escrow_tokens: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
 pub struct Cancel<'info> {
     #[account(mut)]
-    pub sender_wallet: AccountInfo<'info>,
+    pub sender: Signer<'info>,
     #[account(mut)]
     pub sender_tokens: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub recipient_wallet: AccountInfo<'info>,
+    pub recipient: AccountInfo<'info>,
     #[account(mut)]
     pub recipient_tokens: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub metadata_account: AccountInfo<'info>,
+    pub metadata: AccountInfo<'info>,
     #[account(mut)]
-    pub escrow_account: Account<'info, TokenAccount>,
-    #[account()]
-    pub mint_account: ProgramAccount<'info, Mint>,
-    #[account()]
-    pub timelock_program_account: AccountInfo<'info>,
-    #[account()]
-    pub token_program_account: Program<'info, Token>,
-    #[account()]
-    pub system_program_account: Program<'info, System>,
+    pub escrow_tokens: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct Transfer<'info> {
+    #[account(mut)]
+    pub existing_recipient: Signer<'info>,
+    #[account(mut)]
+    pub new_recipient: AccountInfo<'info>,
+    #[account(mut)]
+    pub new_recipient_tokens: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub metadata: AccountInfo<'info>,
+    #[account(mut)]
+    pub escrow_tokens: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system: Program<'info, System>,
 }
