@@ -31,12 +31,10 @@ describe('timelock', () => {
     const provider = anchor.Provider.local(); //todo use env()
     anchor.setProvider(provider);
 
-    // Accounts
     const program = anchor.workspace.Timelock;
     const sender = provider.wallet;
     const metadata = Keypair.generate();
-    // const escrowCliff = Keypair.generate();
-    // const escrowCliffTokens = Keypair.generate();
+    const MINT_DECIMALS = 8;
     let escrowTokens;
     let recipientTokens;
     let nonce;
@@ -47,22 +45,23 @@ describe('timelock', () => {
     // let escrowSigner; 
     // let escrowCliffSigner;
 
-    // Divide by 1000 since Unix timestamp is seconds, and add 5s
-    const start = new BN(+new Date() / 1000 + 5);
+    // Divide by 1000 since Unix timestamp is seconds
+    const start = new BN(+new Date() / 1000 + 1);
     // +60 seconds
     const end = new BN((+new Date()) / 1000 + 60);
-    // Defaults to 1s
-    const period = new BN(10);
+    // In seconds
+    const period = new BN(3);
     // Amount to deposit
-    const depositedAmount = new BN(133769);
+    const depositedAmount = new BN(1337_000_000);
+    //const depositedAmount = new BN(133769 * 10 ** MINT_DECIMALS);
 
 
     it("Initialize test state", async () => {
         [mint, senderTokens] = await common.createMintAndVault(
             provider,
-            new anchor.BN(10_000_000),
+            new anchor.BN(100_000_000_000),
             undefined,
-            8,
+            MINT_DECIMALS,
         );
 
         [escrowTokens, nonce] = await PublicKey.findProgramAddress(
@@ -130,45 +129,46 @@ describe('timelock', () => {
         assert.ok(depositedAmount.toNumber() === _escrowTokensData.amount);
     });
 
-    // it("Withdraws from a contract", async () => {
-    //     setTimeout(async () => {
-    //         // recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
-    //         //console.log('recipient ata', recipientTokens.toBase58())
-    //         recipientTokens = await common.createTokensount(provider, mint, recipient.publicKey);
-    //         console.log('recipient ata 2', recipientTokens.toBase58())
-    //
-    //         const oldescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
-    //         const oldescrowAmount = common.token.parseTokensountData(oldescrowAta.data).amount;
-    //         const oldrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens)
-    //         const oldrecipientAmount = common.token.parseTokensountData(oldrecipientAta.data).amount;
-    //         const withdrawAmount = new BN(10);
-    //
-    //         console.log('metadata sig', escrowSigner.toBase58(), 'metadata', metadata.publicKey.toBase58(), 'escrow_ata_client', escrowTokens.publicKey.toBase58(), 'escrow_tok_acc', (await program.account.vestingContract.fetch(metadata.publicKey)).escrowTokens.toBase58())
-    //         console.log('seed', metadata.publicKey.toBuffer())
-    //         const accounts = {
-    //             metadata: metadata.publicKey,
-    //             escrowTokens: escrowTokens.publicKey,
-    //             escrowSigner,
-    //             recipientTokens,
-    //             recipient: recipient.publicKey,
-    //             tokenProgram: TOKEN_PROGRAM_ID,
-    //         }
-    //
-    //         console.log('acc', accounts, 'metadata', metadata.publicKey.toBase58())
-    //         await program.rpc.withdraw(withdrawAmount, {accounts})
-    //
-    //         const newescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
-    //         const newescrowAmount = common.token.parseTokensountData(newescrowAta.data).amount;
-    //         const newrecipientAta = await program.provider.connection.getAccountInfo(recipientTokens);
-    //         const newrecipientAmount = common.token.parseTokensountData(newrecipientAta.data).amount;
-    //         const escrowData = (await program.account.vestingContract.fetch(metadata.publicKey));
-    //         console.log('depositedAmount', escrowData.depositedAmount, 'withdrawn', escrowData.withdrawn, 'amount', withdrawAmount)
-    //         assert.ok(withdrawAmount.eq(new BN(oldescrowAmount - newescrowAmount)))
-    //         assert.ok(withdrawAmount.eq(new BN(newrecipientAmount - oldrecipientAmount)))
-    //         assert.ok(escrowData.withdrawn.eq(withdrawAmount))
-    //     }, 6000);
-    // });
-    //
+    it("Withdraws from a contract", async () => {
+        setTimeout(async () => {
+            console.log('recipient tokens', recipientTokens.toBase58())
+            const oldEscrowAta = await program.provider.connection.getAccountInfo(escrowTokens);
+            const oldEscrowAmount = common.token.parseTokenAccountData(oldEscrowAta.data).amount;
+            const oldRecipientAta = await program.provider.connection.getAccountInfo(recipientTokens)
+            const oldRecipientAmount = common.token.parseTokenAccountData(oldRecipientAta.data).amount;
+            const withdrawAmount = new BN(0);
+
+            console.log('metadata', metadata.publicKey.toBase58(), 'escrow_ata', escrowTokens.toBase58())
+            console.log('seed', metadata.publicKey.toBuffer())
+
+            console.log('metadata', metadata.publicKey.toBase58())
+            await program.rpc.withdraw(withdrawAmount, {
+                accounts: {
+                    recipient: recipient.publicKey,
+                    recipientTokens,
+                    metadata: metadata.publicKey,
+                    escrowTokens,
+                    mint,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                }, signers: [recipient]
+            })
+
+            const newEscrowAta = await program.provider.connection.getAccountInfo(escrowTokens);
+
+            const newEscrowAmount = common.token.parseTokenAccountData(newEscrowAta.data).amount;
+            const newRecipientAta = await program.provider.connection.getAccountInfo(recipientTokens);
+            const newRecipientAmount = common.token.parseTokenAccountData(newRecipientAta.data).amount;
+            //const escrowData = (await program.account.vestingContract.fetch(metadata.publicKey));
+
+            console.log('depositedAmount', depositedAmount.toNumber(), 'withdrawn', withdrawAmount)
+            console.log('old', oldEscrowAmount, 'new', newEscrowAmount)
+            console.log('old amount recipient', oldRecipientAmount, 'new amount recipient', newRecipientAmount)
+            assert.ok(withdrawAmount.eq(new BN(oldEscrowAmount - newEscrowAmount)))
+            assert.ok(withdrawAmount.eq(new BN(newRecipientAmount - oldRecipientAmount)))
+            // assert.ok(escrowData.withdrawn.eq(withdrawAmount))
+        }, 4500);
+    });
+
     // it("Cancels the stream", async () => {
     //     setTimeout(async () => {
     //         const oldescrowAta = await program.provider.connection.getAccountInfo(escrowTokens.publicKey);
@@ -200,7 +200,7 @@ describe('timelock', () => {
     //
     //     }, 9000);
     // });
-
+    //
     // it("Transfers vesting contract ownership", async () => {
     //     const oldrecipient = (await program.account.vestingContract.fetch(metadata.publicKey)).recipient;
     //
