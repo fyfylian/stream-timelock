@@ -21,4 +21,5 @@ anchor-spl = "0.17.0"
 [dependencies.streamflow-timelock]
 #path = "/Users/mac/git/streamflow-timelock"
 git = "https://github.com/streamflow-finance/streamflow-timelock"
-rev = "fde37d1802c830c1edf108b9d15ca645411a9f11"
+rev = "0a2bb314a4d373eaa5f3e4f01a9c1f6fb3e6f7a6"
+features = ["anchor-support"]
