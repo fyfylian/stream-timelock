@@ -1154,10 +1154,10 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "streamflow-timelock"
 version = "0.2.0"
-source = "git+https://github.com/streamflow-finance/streamflow-timelock?rev=fde37d1802c830c1edf108b9d15ca645411a9f11#fde37d1802c830c1edf108b9d15ca645411a9f11"
+source = "git+https://github.com/streamflow-finance/streamflow-timelock?rev=0a2bb314a4d373eaa5f3e4f01a9c1f6fb3e6f7a6#0a2bb314a4d373eaa5f3e4f01a9c1f6fb3e6f7a6"
 dependencies = [
- "bincode",
- "serde",
+ "anchor-lang",
+ "borsh",
  "solana-program",
  "spl-associated-token-account",
  "spl-token",
