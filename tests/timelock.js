@@ -54,13 +54,15 @@ describe('timelock', () => {
     // Defaults to 1s
     const period = new BN(10);
     // Amount to deposit
-    const depositedAmount = new BN(1337);
+    const depositedAmount = new BN(133769);
 
 
     it("Initialize test state", async () => {
         [mint, senderTokens] = await common.createMintAndVault(
             provider,
-            new anchor.BN(10_000)
+            new anchor.BN(10_000_000),
+            undefined,
+            8,
         );
 
         [escrowTokens, nonce] = await PublicKey.findProgramAddress(
