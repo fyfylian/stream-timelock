@@ -44,7 +44,7 @@ describe('timelock', () => {
         const [_escrowTokens, nonce] = await PublicKey.findProgramAddress([metadata.publicKey.toBuffer()], program.programId)
         escrowTokens = _escrowTokens;
         recipientTokens = await Token.getAssociatedTokenAddress(ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, mint, recipient.publicKey)
-        _recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
+        const _recipientTokens = await utils.token.associatedAddress({mint, owner: recipient.publicKey})
         console.log(_recipientTokens.toBase58(), recipientTokens.toBase58())
         console.log('associated token program', ASSOCIATED_TOKEN_PROGRAM_ID)
         console.log('recipient', recipient.publicKey.toBase58())
@@ -83,8 +83,8 @@ describe('timelock', () => {
                 signers: [metadata, sender.payer],
             })
 
-        const _escrowTokens = await program.provider.connection.getAccountInfo(escrowTokens.publicKey)
-        const _senderTokens = await program.provider.connection.getAccountInfo(senderTokens.publicKey)
+        const _escrowTokens = await program.provider.connection.getAccountInfo(escrowTokens)
+        const _senderTokens = await program.provider.connection.getAccountInfo(senderTokens)
 
         const _metadata = await program.provider.connection.getAccountInfo(metadata.publicKey)
         const _escrowTokensData = common.token.parseTokenAccountData(_escrowTokens.data);
