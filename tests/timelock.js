@@ -1,10 +1,12 @@
-const assert = require('assert')
+const assert = require('assert');
+const BufferLayout = require('buffer-layout');
 const anchor = require('@project-serum/anchor');
 const common = require('@project-serum/common');
 const {
     TOKEN_PROGRAM_ID,
     ASSOCIATED_TOKEN_PROGRAM_ID,
-    Token
+    Token,
+    u64
 } = require('@solana/spl-token')
 const {
     PublicKey,
@@ -26,6 +28,42 @@ const {
 
 // The stream recipient main wallet
 const recipient = Keypair.generate();
+
+const stream_data = BufferLayout.struct([
+    BufferLayout.blob(8, "start_time"),
+    BufferLayout.blob(8, "end_time"),
+    BufferLayout.blob(8, "amount"),
+    BufferLayout.blob(8, "period"),
+    BufferLayout.blob(8, "cliff"),
+    BufferLayout.blob(8, "cliff_amount"),
+    BufferLayout.blob(8, "withdrawn"),
+    BufferLayout.blob(32, "sender"),
+    BufferLayout.blob(32, "sender_tokens"),
+    BufferLayout.blob(32, "recipient"),
+    BufferLayout.blob(32, "recipient_tokens"),
+    BufferLayout.blob(32, "mint"),
+    BufferLayout.blob(32, "escrow_tokens"),
+]);
+
+function decode_stream_data(buf) {
+    let raw = stream_data.decode(buf);
+
+    return {
+        "start_time": new u64(raw.start_time),
+        "end_time": new u64(raw.end_time),
+        "amount": new u64(raw.amount),
+        "period": new u64(raw.period),
+        "cliff": new u64(raw.cliff),
+        "cliff_amount": new u64(raw.cliff_amount),
+        "withdrawn": new u64(raw.withdrawn),
+        "sender": new PublicKey(raw.sender),
+        "sender_tokens": new PublicKey(raw.sender_tokens),
+        "recipient": new PublicKey(raw.recipient),
+        "recipient_tokens": new PublicKey(raw.recipient_tokens),
+        "mint": new PublicKey(raw.mint),
+        "escrow_tokens": new PublicKey(raw.escrow_tokens),
+    };
+}
 
 describe('timelock', () => {
     const provider = anchor.Provider.local(); //todo use env()
@@ -118,9 +156,8 @@ describe('timelock', () => {
         const _escrowTokensData = common.token.parseTokenAccountData(_escrowTokens.data);
         const _senderTokensData = common.token.parseTokenAccountData(_senderTokens.data);
 
-        console.log('metadata', _metadata.data,
-            'escrow tokens', _escrowTokensData,
-            'senderTokens', _senderTokensData);
+        let strm_data = decode_stream_data(_metadata.data);
+        console.log("Stream Data:\n", strm_data);
 
         console.log('deposited during contract creation: ',
             depositedAmount.toNumber(),
@@ -150,7 +187,8 @@ describe('timelock', () => {
                     escrowTokens,
                     mint,
                     tokenProgram: TOKEN_PROGRAM_ID,
-                }, signers: [recipient]
+                },
+                signers: [recipient]
             })
 
             const newEscrowAta = await program.provider.connection.getAccountInfo(escrowTokens);
