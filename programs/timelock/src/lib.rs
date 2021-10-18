@@ -1,17 +1,17 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::{Mint, Token, TokenAccount};
-use streamflow_timelock::{
+use stream_timelock::{
     associated_token::{cancel_token_stream, initialize_token_stream, withdraw_token_stream},
     state::{CancelAccounts, InitializeAccounts, StreamInstruction, WithdrawAccounts},
 };
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("C6DTWNjFALaBwaJcp55fkW6182ghm59VpbxbzGjbBei3");
 
 #[program]
 pub mod timelock {
-    use streamflow_timelock::associated_token::update_recipient;
-    use streamflow_timelock::state::TransferAccounts;
+    use stream_timelock::associated_token::update_recipient;
+    use stream_timelock::state::TransferAccounts;
 
     use super::*;
 
