@@ -1,8 +1,6 @@
 # FyfyStream Timelock
 
-Token Vesting and Streaming Payments for SPL tokens. Free and open-source.
-
-Backed by Serum and Solana.
+Token Vesting and Streaming Payments for SPL tokens. Backed by Serum and Solana.
 
 ## Important:
 
