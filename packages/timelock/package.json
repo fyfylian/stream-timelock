@@ -1,5 +1,5 @@
 {
-  "name": "@streamflow/timelock",
+  "name": "@fyfystream/timelock",
   "version": "0.1.0",
   "description": "SDK to interact with Fyfy Stream Timelock program on Solana.",
   "main": "dist/timelock.js",
