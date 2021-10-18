@@ -8,7 +8,6 @@ Backed by Serum and Solana.
 
 This software is under heavy development. It's provided as is, without any warranty. The code is not audited.
 
-### System overview
 
 ![Platform overview](/misc/platform.png)
 
