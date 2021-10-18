@@ -1,4 +1,4 @@
-# StreamFlow Timelock
+# FyfyStream Timelock
 
 Token Vesting and Streaming Payments for SPL tokens. Free and open-source.
 
@@ -14,7 +14,7 @@ This software is under heavy development. It's provided as is, without any warra
 
 ### Legal
 
-This file is part of `streamflow-finance/timelock`
+This file is part of `fyfystream/timelock`
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public
 License version 3 as published by the Free Software Foundation.
