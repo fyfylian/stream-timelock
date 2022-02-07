@@ -1,24 +1,28 @@
-# FyfyStream Timelock
+streamflow-timelock
+===================
+**Security audit passed. [Report here.](https://github.com/StreamFlow-Finance/timelock-crate/blob/master/TIMELOCK_COMMUNITY_REPORT_FINAL.pdf) ✅**
 
-Token Vesting and Streaming Payments for SPL tokens. Backed by Serum and Solana.
+This Rust crate provides SPL timelock functionalities that can be used "out of the box" and integrated in other Solana programs.
 
-## Important:
+Functionalities are:
+- `create` a vesting contract.
+- `withdraw` from a vesting contract.
+- `cancel` a vesting contract.
+- `transfer_recipient` of a vesting contract.
 
-This software is under heavy development. It's provided as is, without any warranty. The code is not audited.
+High level overview
+--
+![Overview](/misc/overview.jpeg)
 
+Check the [docs](https://docs.rs/streamflow-timelock/) to get familiar with the crate.
+Or check the [Timelock program implementation](https://github.com/streamflow-finance/timelock) where this crate is used.
 
-![Platform overview](/misc/platform.png)
+Run `python3 misc/make_idl.py > OUTPUT_FILE.js` to generate JS IDL to be used for easy (de)serialization of the program account data structs.
 
-### Legal
+License
+-------
+`timelock-crate` is licensed under [Business Source License](LICENSE).
+The [Business Source License](LICENSE) is not a Free and Open-source license. However, the Licensed Work will eventually be made available
+under an Open Source License, as stated in this License.
 
-This file is part of `fyfystream/timelock`
-
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public
-License version 3 as published by the Free Software Foundation.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
-details.
-
-You should have received a copy of the GNU Affero General Public License along with this program. If not,
-see <https://www.gnu.org/licenses/>.
+For the community (free and open-source) version, please see [this release](https://github.com/StreamFlow-Finance/timelock-crate/releases/tag/v0.3.0).
